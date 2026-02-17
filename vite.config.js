@@ -47,9 +47,10 @@ function apiProxyPlugin() {
 
           if (contentType.includes('mpegurl') || targetUrl.endsWith('.m3u8')) {
             const text = await response.text()
-            const base = new URL(response.url)
-            const origin = base.origin
-            const dir = base.pathname.substring(0, base.pathname.lastIndexOf('/') + 1)
+            const requestedOrigin = new URL(targetUrl).origin
+            const resolvedBase = new URL(response.url)
+            const resolvedOrigin = resolvedBase.origin
+            const resolvedDir = resolvedBase.pathname.substring(0, resolvedBase.pathname.lastIndexOf('/') + 1)
 
             let hasProxiedSegments = false
 
@@ -60,17 +61,18 @@ function apiProxyPlugin() {
                 if (match.startsWith('http://') || match.startsWith('https://')) {
                   segmentUrl = match
                 } else if (match.startsWith('/')) {
-                  segmentUrl = origin + match
+                  segmentUrl = resolvedOrigin + match
                 } else {
-                  segmentUrl = origin + dir + match
+                  segmentUrl = resolvedOrigin + resolvedDir + match
                 }
 
                 const segmentOrigin = new URL(segmentUrl).origin
-                if (segmentOrigin !== origin) {
-                  hasProxiedSegments = true
-                  return `/api/stream?url=${encodeURIComponent(segmentUrl)}`
+                if (segmentOrigin === resolvedOrigin) {
+                  const path = new URL(segmentUrl).pathname
+                  return requestedOrigin + path
                 }
-                return segmentUrl
+                hasProxiedSegments = true
+                return `/api/stream?url=${encodeURIComponent(segmentUrl)}`
               }
             )
 

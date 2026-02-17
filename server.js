@@ -71,9 +71,10 @@ async function handleStream(req, res) {
     // For HLS manifests, inspect and selectively rewrite segment URLs
     if (contentType.includes('mpegurl') || url.endsWith('.m3u8')) {
       const text = await response.text()
-      const base = new URL(response.url)
-      const origin = base.origin
-      const dir = base.pathname.substring(0, base.pathname.lastIndexOf('/') + 1)
+      const requestedOrigin = new URL(url).origin // original IPTV server (e.g. cf.cheaplytv.com)
+      const resolvedBase = new URL(response.url)  // after redirects (e.g. 185.245.1.104)
+      const resolvedOrigin = resolvedBase.origin
+      const resolvedDir = resolvedBase.pathname.substring(0, resolvedBase.pathname.lastIndexOf('/') + 1)
 
       let hasProxiedSegments = false
 
@@ -84,20 +85,23 @@ async function handleStream(req, res) {
           if (match.startsWith('http://') || match.startsWith('https://')) {
             segmentUrl = match
           } else if (match.startsWith('/')) {
-            segmentUrl = origin + match
+            segmentUrl = resolvedOrigin + match
           } else {
-            segmentUrl = origin + dir + match
+            segmentUrl = resolvedOrigin + resolvedDir + match
           }
 
-          // Check if segment is on a different origin than the IPTV server
+          // Check if segment is on the same origin as the redirect target (main IPTV backend)
           const segmentOrigin = new URL(segmentUrl).origin
-          if (segmentOrigin !== origin) {
-            hasProxiedSegments = true
-            return `/api/stream?url=${encodeURIComponent(segmentUrl)}`
+          if (segmentOrigin === resolvedOrigin) {
+            // Same backend — rewrite path to go through the original Cloudflare origin
+            // so the browser fetches via cf domain (redirect is transparent, no CORS issue)
+            const path = new URL(segmentUrl).pathname
+            return requestedOrigin + path
           }
 
-          // Same origin — return absolute URL, browser fetches directly
-          return segmentUrl
+          // Different origin entirely (external CDN) — must proxy
+          hasProxiedSegments = true
+          return `/api/stream?url=${encodeURIComponent(segmentUrl)}`
         }
       )
 
