@@ -58,6 +58,9 @@ export default function Player({ src, type, poster, onBack }) {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
+        xhrSetup: (xhr) => {
+          xhr.withCredentials = false
+        },
       })
       hlsRef.current = hls
       hls.loadSource(src)
@@ -232,7 +235,6 @@ export default function Player({ src, type, poster, onBack }) {
         className="w-full h-full"
         controls
         autoPlay
-        crossOrigin="anonymous"
         poster={poster}
       />
     </div>
