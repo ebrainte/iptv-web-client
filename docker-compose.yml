@@ -1,0 +1,6 @@
+services:
+  iptv-webclient:
+    image: ghcr.io/ebrainte/iptv-web-client:latest
+    ports:
+      - "80:80"
+    restart: unless-stopped

@@ -60,7 +60,7 @@ export const getShortEpg = (streamId, limit) =>
 export const getFullEpg = (streamId) =>
   apiCall('get_simple_data_table', { stream_id: streamId })
 
-// Stream URLs - direct to server (browser handles video cross-origin fine)
+// Stream URLs - direct to IPTV server
 export function getLiveStreamUrl(streamId, extension) {
   const { server, username, password } = useAuthStore.getState()
   const ext = extension || 'm3u8'
