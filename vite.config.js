@@ -47,13 +47,11 @@ function apiProxyPlugin() {
 
           if (contentType.includes('mpegurl') || targetUrl.endsWith('.m3u8')) {
             const text = await response.text()
-            const requestedOrigin = new URL(targetUrl).origin
             const resolvedBase = new URL(response.url)
             const resolvedOrigin = resolvedBase.origin
             const resolvedDir = resolvedBase.pathname.substring(0, resolvedBase.pathname.lastIndexOf('/') + 1)
 
-            let hasProxiedSegments = false
-
+            // Fallback proxy — rewrite ALL segments through proxy
             const rewritten = text.replace(
               /^(?!#)((?:https?:\/\/)?[^\s]+)$/gm,
               (match) => {
@@ -65,16 +63,10 @@ function apiProxyPlugin() {
                 } else {
                   segmentUrl = resolvedOrigin + resolvedDir + match
                 }
-
-                const segmentOrigin = new URL(segmentUrl).origin
-                if (segmentOrigin === resolvedOrigin) {
-                  const path = new URL(segmentUrl).pathname
-                  return requestedOrigin + path
-                }
-                hasProxiedSegments = true
                 return `/api/stream?url=${encodeURIComponent(segmentUrl)}`
               }
             )
+            const hasProxiedSegments = true
 
             res.writeHead(200, {
               'Content-Type': 'application/vnd.apple.mpegurl',

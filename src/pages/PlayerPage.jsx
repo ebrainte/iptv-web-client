@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { getLiveStreamUrl, getVodStreamUrl, getSeriesStreamUrl } from '../api/xtreamApi'
+import { getLiveStreamUrl, getLiveStreamUrlProxied, getVodStreamUrl, getSeriesStreamUrl } from '../api/xtreamApi'
 import Player from '../components/Player'
 
 export default function PlayerPage() {
@@ -14,7 +14,6 @@ export default function PlayerPage() {
       case 'live':
         return getLiveStreamUrl(id, 'm3u8')
       case 'vod':
-        // Use original container — most servers don't support HLS for VOD
         return getVodStreamUrl(id, ext || 'mkv')
       case 'series':
         return getSeriesStreamUrl(id, ext || 'mkv')
@@ -23,9 +22,15 @@ export default function PlayerPage() {
     }
   }, [type, id, ext])
 
+  // Proxied fallback URL for live TV (used when direct fails due to CORS)
+  const proxiedUrl = useMemo(() => {
+    if (type === 'live') return getLiveStreamUrlProxied(id, 'm3u8')
+    return null
+  }, [type, id])
+
   return (
     <div className="fixed inset-0 z-50 bg-black">
-      <Player src={streamUrl} type={type} onBack={() => navigate(-1)} />
+      <Player src={streamUrl} proxiedSrc={proxiedUrl} type={type} onBack={() => navigate(-1)} />
     </div>
   )
 }

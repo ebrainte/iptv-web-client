@@ -8,7 +8,7 @@ function formatBytes(bytes) {
   return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i]
 }
 
-export default function Player({ src, type, poster, onBack }) {
+export default function Player({ src, proxiedSrc, type, poster, onBack }) {
   const videoRef = useRef(null)
   const hlsRef = useRef(null)
   const [audioTracks, setAudioTracks] = useState([])
@@ -16,12 +16,13 @@ export default function Player({ src, type, poster, onBack }) {
   const [subtitleTracks, setSubtitleTracks] = useState([])
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState(-1)
   const [showPanel, setShowPanel] = useState(false)
-  const [proxyMode, setProxyMode] = useState(null) // 'direct' | 'proxied' | null
+  const [proxyMode, setProxyMode] = useState(null)
   const [proxyStats, setProxyStats] = useState(null)
+  const [activeSrc, setActiveSrc] = useState(src)
+  const triedProxy = useRef(false)
   const statsInterval = useRef(null)
 
-  // Detect HLS: direct .m3u8 or proxied through /api/stream with .m3u8
-  const isHls = src?.endsWith('.m3u8') || (src?.includes('/api/stream') && src?.includes('.m3u8'))
+  const isHls = activeSrc?.endsWith('.m3u8') || (activeSrc?.includes('/api/stream') && activeSrc?.includes('.m3u8'))
 
   // Poll proxy stats when in proxied mode
   useEffect(() => {
@@ -40,6 +41,13 @@ export default function Player({ src, type, poster, onBack }) {
       if (statsInterval.current) clearInterval(statsInterval.current)
     }
   }, [proxyMode])
+
+  // Reset when src changes
+  useEffect(() => {
+    setActiveSrc(src)
+    triedProxy.current = false
+    setProxyMode(null)
+  }, [src])
 
   // Detect native audio/subtitle tracks from <video> element (for MKV/MP4)
   const detectNativeTracks = useCallback(() => {
@@ -73,25 +81,13 @@ export default function Player({ src, type, poster, onBack }) {
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !src) return
+    if (!video || !activeSrc) return
 
     setAudioTracks([])
     setSubtitleTracks([])
     setCurrentAudioTrack(0)
     setCurrentSubtitleTrack(-1)
     setShowPanel(false)
-    setProxyMode(null)
-
-    // Detect proxy mode from manifest response header
-    if (src.includes('/api/stream')) {
-      fetch(src).then((r) => {
-        const mode = r.headers.get('X-Proxy-Mode')
-        if (mode) {
-          setProxyMode(mode)
-          console.log(`[IPTV] Stream proxy mode: ${mode}`)
-        }
-      }).catch(() => {})
-    }
 
     if (isHls && Hls.isSupported()) {
       const hls = new Hls({
@@ -102,8 +98,22 @@ export default function Player({ src, type, poster, onBack }) {
         },
       })
       hlsRef.current = hls
-      hls.loadSource(src)
+      hls.loadSource(activeSrc)
       hls.attachMedia(video)
+
+      // If loading via proxy, detect proxy mode from manifest header
+      if (activeSrc.includes('/api/stream')) {
+        fetch(activeSrc).then((r) => {
+          const mode = r.headers.get('X-Proxy-Mode')
+          if (mode) {
+            setProxyMode(mode)
+            console.log(`[IPTV] Stream proxy mode: ${mode}`)
+          }
+        }).catch(() => {})
+      } else {
+        setProxyMode('direct')
+        console.log('[IPTV] Stream: direct (no proxy)')
+      }
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         video.play().catch(() => {})
@@ -129,6 +139,15 @@ export default function Player({ src, type, poster, onBack }) {
 
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
+          // On network error (CORS), try proxied version if available
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !triedProxy.current && proxiedSrc) {
+            console.log('[IPTV] Direct stream failed (CORS), retrying via proxy...')
+            triedProxy.current = true
+            hls.destroy()
+            hlsRef.current = null
+            setActiveSrc(proxiedSrc)
+            return
+          }
           if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             hls.recoverMediaError()
           } else {
@@ -143,18 +162,18 @@ export default function Player({ src, type, poster, onBack }) {
       }
     } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
       // Safari native HLS
-      video.src = src
+      video.src = activeSrc
       video.addEventListener('loadedmetadata', detectNativeTracks)
       video.play().catch(() => {})
       return () => video.removeEventListener('loadedmetadata', detectNativeTracks)
     } else {
       // Direct playback (MKV, MP4, etc.)
-      video.src = src
+      video.src = activeSrc
       video.addEventListener('loadedmetadata', detectNativeTracks)
       video.play().catch(() => {})
       return () => video.removeEventListener('loadedmetadata', detectNativeTracks)
     }
-  }, [src, isHls, detectNativeTracks])
+  }, [activeSrc, isHls, detectNativeTracks, proxiedSrc])
 
   const switchAudio = (index) => {
     if (isHls && hlsRef.current) {

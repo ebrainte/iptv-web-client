@@ -61,9 +61,14 @@ export const getFullEpg = (streamId) =>
   apiCall('get_simple_data_table', { stream_id: streamId })
 
 // Stream URLs
-// Live TV goes through /api/stream so the server can inspect the manifest
-// and proxy only segments from external origins that lack CORS headers
 export function getLiveStreamUrl(streamId, extension) {
+  const { server, username, password } = useAuthStore.getState()
+  const ext = extension || 'm3u8'
+  return `${server}/live/${username}/${password}/${streamId}.${ext}`
+}
+
+// Proxied version for channels with CORS issues on external CDN segments
+export function getLiveStreamUrlProxied(streamId, extension) {
   const { server, username, password } = useAuthStore.getState()
   const ext = extension || 'm3u8'
   const directUrl = `${server}/live/${username}/${password}/${streamId}.${ext}`

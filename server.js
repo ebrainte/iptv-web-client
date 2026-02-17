@@ -71,13 +71,11 @@ async function handleStream(req, res) {
     // For HLS manifests, inspect and selectively rewrite segment URLs
     if (contentType.includes('mpegurl') || url.endsWith('.m3u8')) {
       const text = await response.text()
-      const requestedOrigin = new URL(url).origin // original IPTV server (e.g. cf.cheaplytv.com)
-      const resolvedBase = new URL(response.url)  // after redirects (e.g. 185.245.1.104)
+      const resolvedBase = new URL(response.url)
       const resolvedOrigin = resolvedBase.origin
       const resolvedDir = resolvedBase.pathname.substring(0, resolvedBase.pathname.lastIndexOf('/') + 1)
 
-      let hasProxiedSegments = false
-
+      // This endpoint is the fallback for CORS failures — proxy ALL segments
       const rewritten = text.replace(
         /^(?!#)((?:https?:\/\/)?[^\s]+)$/gm,
         (match) => {
@@ -89,21 +87,10 @@ async function handleStream(req, res) {
           } else {
             segmentUrl = resolvedOrigin + resolvedDir + match
           }
-
-          // Check if segment is on the same origin as the redirect target (main IPTV backend)
-          const segmentOrigin = new URL(segmentUrl).origin
-          if (segmentOrigin === resolvedOrigin) {
-            // Same backend — rewrite path to go through the original Cloudflare origin
-            // so the browser fetches via cf domain (redirect is transparent, no CORS issue)
-            const path = new URL(segmentUrl).pathname
-            return requestedOrigin + path
-          }
-
-          // Different origin entirely (external CDN) — must proxy
-          hasProxiedSegments = true
           return `/api/stream?url=${encodeURIComponent(segmentUrl)}`
         }
       )
+      const hasProxiedSegments = true
 
       res.writeHead(200, {
         'Content-Type': 'application/vnd.apple.mpegurl',
