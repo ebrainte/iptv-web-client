@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Hls from 'hls.js'
 
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i]
+}
+
 export default function Player({ src, type, poster, onBack }) {
   const videoRef = useRef(null)
   const hlsRef = useRef(null)
@@ -9,15 +16,36 @@ export default function Player({ src, type, poster, onBack }) {
   const [subtitleTracks, setSubtitleTracks] = useState([])
   const [currentSubtitleTrack, setCurrentSubtitleTrack] = useState(-1)
   const [showPanel, setShowPanel] = useState(false)
+  const [proxyMode, setProxyMode] = useState(null) // 'direct' | 'proxied' | null
+  const [proxyStats, setProxyStats] = useState(null)
+  const statsInterval = useRef(null)
 
-  const isHls = src?.endsWith('.m3u8')
+  // Detect HLS: direct .m3u8 or proxied through /api/stream with .m3u8
+  const isHls = src?.endsWith('.m3u8') || (src?.includes('/api/stream') && src?.includes('.m3u8'))
+
+  // Poll proxy stats when in proxied mode
+  useEffect(() => {
+    if (proxyMode === 'proxied') {
+      const poll = () => {
+        fetch('/api/proxy-stats')
+          .then((r) => r.json())
+          .then(setProxyStats)
+          .catch(() => {})
+      }
+      poll()
+      statsInterval.current = setInterval(poll, 5000)
+      return () => clearInterval(statsInterval.current)
+    } else {
+      setProxyStats(null)
+      if (statsInterval.current) clearInterval(statsInterval.current)
+    }
+  }, [proxyMode])
 
   // Detect native audio/subtitle tracks from <video> element (for MKV/MP4)
   const detectNativeTracks = useCallback(() => {
     const video = videoRef.current
     if (!video) return
 
-    // Audio tracks (limited browser support but works in some)
     if (video.audioTracks?.length > 1) {
       const tracks = []
       for (let i = 0; i < video.audioTracks.length; i++) {
@@ -30,7 +58,6 @@ export default function Player({ src, type, poster, onBack }) {
       setAudioTracks(tracks)
     }
 
-    // Text tracks (subtitles)
     if (video.textTracks?.length > 0) {
       const tracks = []
       for (let i = 0; i < video.textTracks.length; i++) {
@@ -53,6 +80,18 @@ export default function Player({ src, type, poster, onBack }) {
     setCurrentAudioTrack(0)
     setCurrentSubtitleTrack(-1)
     setShowPanel(false)
+    setProxyMode(null)
+
+    // Detect proxy mode from manifest response header
+    if (src.includes('/api/stream')) {
+      fetch(src).then((r) => {
+        const mode = r.headers.get('X-Proxy-Mode')
+        if (mode) {
+          setProxyMode(mode)
+          console.log(`[IPTV] Stream proxy mode: ${mode}`)
+        }
+      }).catch(() => {})
+    }
 
     if (isHls && Hls.isSupported()) {
       const hls = new Hls({
@@ -145,17 +184,41 @@ export default function Player({ src, type, poster, onBack }) {
     <div className="relative w-full h-full bg-black flex items-center justify-center group">
       {/* Top bar */}
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent p-4 flex items-start justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="bg-black/60 hover:bg-black/80 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="bg-black/60 hover:bg-black/80 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
+            </button>
+          )}
+
+          {/* Proxy mode badge */}
+          {proxyMode && (
+            <div
+              className={`px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide ${
+                proxyMode === 'proxied'
+                  ? 'bg-orange-500/80 text-white'
+                  : 'bg-green-500/80 text-white'
+              }`}
+              title={
+                proxyMode === 'proxied'
+                  ? `Segments proxied through server${proxyStats ? ` | Total proxied: ${proxyStats.humanReadable} (${proxyStats.requestsProxied} requests)` : ''}`
+                  : 'Segments loaded directly from source'
+              }
+            >
+              {proxyMode === 'proxied' ? (
+                <>PROXIED{proxyStats ? ` | ${proxyStats.humanReadable}` : ''}</>
+              ) : (
+                'DIRECT'
+              )}
+            </div>
+          )}
+        </div>
 
         {hasTrackOptions && (
           <button
