@@ -8,6 +8,33 @@ function formatBytes(bytes) {
   return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i]
 }
 
+// Pre-check a manifest to see if it has external-origin segments
+async function checkNeedsProxy(m3u8Url) {
+  try {
+    const res = await fetch(m3u8Url)
+    if (!res.ok) return false
+    const text = await res.text()
+    const finalOrigin = new URL(res.url).origin
+
+    const lines = text.split('\n')
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      // It's a segment URL — check if it points to a different origin
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        const segOrigin = new URL(trimmed).origin
+        if (segOrigin !== finalOrigin) {
+          console.log(`[IPTV] External segment detected: ${trimmed} (origin: ${segOrigin} != ${finalOrigin})`)
+          return true
+        }
+      }
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 export default function Player({ src, proxiedSrc, type, poster, onBack }) {
   const videoRef = useRef(null)
   const hlsRef = useRef(null)
@@ -18,11 +45,10 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
   const [showPanel, setShowPanel] = useState(false)
   const [proxyMode, setProxyMode] = useState(null)
   const [proxyStats, setProxyStats] = useState(null)
-  const [activeSrc, setActiveSrc] = useState(src)
-  const triedProxy = useRef(false)
+  const [resolvedSrc, setResolvedSrc] = useState(null)
   const statsInterval = useRef(null)
 
-  const isHls = activeSrc?.endsWith('.m3u8') || (activeSrc?.includes('/api/stream') && activeSrc?.includes('.m3u8'))
+  const isHls = resolvedSrc?.endsWith('.m3u8') || (resolvedSrc?.includes('/api/stream') && resolvedSrc?.includes('.m3u8'))
 
   // Poll proxy stats when in proxied mode
   useEffect(() => {
@@ -42,12 +68,34 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
     }
   }, [proxyMode])
 
-  // Reset when src changes
+  // Pre-check manifest and decide direct vs proxied
   useEffect(() => {
-    setActiveSrc(src)
-    triedProxy.current = false
+    setResolvedSrc(null)
     setProxyMode(null)
-  }, [src])
+
+    if (!src) return
+
+    // Only pre-check HLS streams that have a proxy fallback
+    if (proxiedSrc && (src.endsWith('.m3u8') || src.includes('.m3u8'))) {
+      let cancelled = false
+      checkNeedsProxy(src).then((needsProxy) => {
+        if (cancelled) return
+        if (needsProxy) {
+          console.log('[IPTV] Using proxied stream (external segments detected)')
+          setResolvedSrc(proxiedSrc)
+          setProxyMode('proxied')
+        } else {
+          console.log('[IPTV] Using direct stream')
+          setResolvedSrc(src)
+          setProxyMode('direct')
+        }
+      })
+      return () => { cancelled = true }
+    } else {
+      setResolvedSrc(src)
+      setProxyMode(src.includes('/api/stream') ? 'proxied' : 'direct')
+    }
+  }, [src, proxiedSrc])
 
   // Detect native audio/subtitle tracks from <video> element (for MKV/MP4)
   const detectNativeTracks = useCallback(() => {
@@ -79,9 +127,10 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
     }
   }, [])
 
+  // Main playback effect
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !activeSrc) return
+    if (!video || !resolvedSrc) return
 
     setAudioTracks([])
     setSubtitleTracks([])
@@ -98,22 +147,8 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
         },
       })
       hlsRef.current = hls
-      hls.loadSource(activeSrc)
+      hls.loadSource(resolvedSrc)
       hls.attachMedia(video)
-
-      // If loading via proxy, detect proxy mode from manifest header
-      if (activeSrc.includes('/api/stream')) {
-        fetch(activeSrc).then((r) => {
-          const mode = r.headers.get('X-Proxy-Mode')
-          if (mode) {
-            setProxyMode(mode)
-            console.log(`[IPTV] Stream proxy mode: ${mode}`)
-          }
-        }).catch(() => {})
-      } else {
-        setProxyMode('direct')
-        console.log('[IPTV] Stream: direct (no proxy)')
-      }
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         video.play().catch(() => {})
@@ -139,15 +174,6 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
 
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
-          // On network error (CORS), try proxied version if available
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !triedProxy.current && proxiedSrc) {
-            console.log('[IPTV] Direct stream failed (CORS), retrying via proxy...')
-            triedProxy.current = true
-            hls.destroy()
-            hlsRef.current = null
-            setActiveSrc(proxiedSrc)
-            return
-          }
           if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             hls.recoverMediaError()
           } else {
@@ -161,19 +187,17 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
         hlsRef.current = null
       }
     } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari native HLS
-      video.src = activeSrc
+      video.src = resolvedSrc
       video.addEventListener('loadedmetadata', detectNativeTracks)
       video.play().catch(() => {})
       return () => video.removeEventListener('loadedmetadata', detectNativeTracks)
     } else {
-      // Direct playback (MKV, MP4, etc.)
-      video.src = activeSrc
+      video.src = resolvedSrc
       video.addEventListener('loadedmetadata', detectNativeTracks)
       video.play().catch(() => {})
       return () => video.removeEventListener('loadedmetadata', detectNativeTracks)
     }
-  }, [activeSrc, isHls, detectNativeTracks, proxiedSrc])
+  }, [resolvedSrc, isHls, detectNativeTracks])
 
   const switchAudio = (index) => {
     if (isHls && hlsRef.current) {
@@ -216,7 +240,6 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
             </button>
           )}
 
-          {/* Proxy mode badge */}
           {proxyMode && (
             <div
               className={`px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide ${
@@ -253,7 +276,6 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
         )}
       </div>
 
-      {/* Track selection panel */}
       {showPanel && hasTrackOptions && (
         <div className="absolute top-16 right-4 z-20 bg-gray-900/95 border border-gray-700 rounded-xl p-4 min-w-[220px] max-h-[70vh] overflow-y-auto">
           {audioTracks.length > 1 && (
