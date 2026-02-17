@@ -9,22 +9,23 @@ export default function PlayerPage() {
   const location = useLocation()
   const ext = location.state?.ext
 
-  const { hlsUrl, fallbackUrl } = useMemo(() => {
-    const getUrl = type === 'live' ? getLiveStreamUrl : type === 'vod' ? getVodStreamUrl : getSeriesStreamUrl
-    if (type === 'live') {
-      // Live is always HLS, no fallback needed
-      return { hlsUrl: getUrl(id, 'm3u8'), fallbackUrl: null }
-    }
-    // VOD/Series: try m3u8 first, fall back to original extension
-    return {
-      hlsUrl: getUrl(id, 'm3u8'),
-      fallbackUrl: getUrl(id, ext || 'mkv'),
+  const streamUrl = useMemo(() => {
+    switch (type) {
+      case 'live':
+        return getLiveStreamUrl(id, 'm3u8')
+      case 'vod':
+        // Use original container — most servers don't support HLS for VOD
+        return getVodStreamUrl(id, ext || 'mkv')
+      case 'series':
+        return getSeriesStreamUrl(id, ext || 'mkv')
+      default:
+        return ''
     }
   }, [type, id, ext])
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
-      <Player src={hlsUrl} fallbackSrc={fallbackUrl} onBack={() => navigate(-1)} />
+      <Player src={streamUrl} type={type} onBack={() => navigate(-1)} />
     </div>
   )
 }

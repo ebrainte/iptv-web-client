@@ -1,24 +1,35 @@
 import useAuthStore from '../store/useAuthStore'
 
-function getBaseUrl() {
-  const { server, username, password } = useAuthStore.getState()
-  return `${server}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+function buildServerUrl(path) {
+  const { server } = useAuthStore.getState()
+  return `${server}${path}`
+}
+
+function proxyFetch(url) {
+  const proxied = `/api/proxy?url=${encodeURIComponent(url)}`
+  return fetch(proxied)
+}
+
+function getApiPath(action, params = {}) {
+  const { username, password } = useAuthStore.getState()
+  let path = `/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+  if (action) path += `&action=${action}`
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null) path += `&${key}=${encodeURIComponent(val)}`
+  }
+  return path
 }
 
 async function apiCall(action, params = {}) {
-  let url = getBaseUrl()
-  if (action) url += `&action=${action}`
-  for (const [key, val] of Object.entries(params)) {
-    if (val !== undefined && val !== null) url += `&${key}=${encodeURIComponent(val)}`
-  }
-  const res = await fetch(url)
+  const url = buildServerUrl(getApiPath(action, params))
+  const res = await proxyFetch(url)
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
 }
 
 export async function authenticate(server, username, password) {
   const url = `${server}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
-  const res = await fetch(url)
+  const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`)
   if (!res.ok) throw new Error('Authentication failed')
   const data = await res.json()
   if (data.user_info?.auth === 0) throw new Error('Invalid credentials')
@@ -49,7 +60,7 @@ export const getShortEpg = (streamId, limit) =>
 export const getFullEpg = (streamId) =>
   apiCall('get_simple_data_table', { stream_id: streamId })
 
-// Stream URLs - direct to server
+// Stream URLs - direct to server (browser handles video cross-origin fine)
 export function getLiveStreamUrl(streamId, extension) {
   const { server, username, password } = useAuthStore.getState()
   const ext = extension || 'm3u8'
