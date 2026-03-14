@@ -1,35 +1,46 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useOutletContext } from 'react-router-dom'
-import { getVodCategories, getVodStreams } from '../api/xtreamApi'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
+import useContentStore from '../store/useContentStore'
 import VodCard from '../components/VodCard'
 
 export default function VodPage() {
   const { search } = useOutletContext()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [categories, setCategories] = useState([])
   const [movies, setMovies] = useState([])
-  const [selectedCategory, setSelectedCategory] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadingMovies, setLoadingMovies] = useState(false)
 
+  const selectedCategory = searchParams.get('cat')
+
+  const fetchVodCategories = useContentStore((s) => s.fetchVodCategories)
+  const fetchVodStreams = useContentStore((s) => s.fetchVodStreams)
+
   useEffect(() => {
-    getVodCategories()
+    fetchVodCategories()
       .then(setCategories)
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [fetchVodCategories])
 
-  const handleSelectCategory = (cat) => {
-    setSelectedCategory(cat.category_id)
+  useEffect(() => {
+    if (!selectedCategory) {
+      setMovies([])
+      return
+    }
     setLoadingMovies(true)
-    getVodStreams(cat.category_id)
+    fetchVodStreams(selectedCategory)
       .then(setMovies)
       .catch(() => setMovies([]))
       .finally(() => setLoadingMovies(false))
+  }, [selectedCategory, fetchVodStreams])
+
+  const handleSelectCategory = (cat) => {
+    setSearchParams({ cat: cat.category_id })
   }
 
   const handleBack = () => {
-    setSelectedCategory(null)
-    setMovies([])
+    setSearchParams({})
   }
 
   const filteredCategories = useMemo(() => {
@@ -53,7 +64,7 @@ export default function VodPage() {
   }
 
   if (selectedCategory) {
-    const catName = categories.find((c) => c.category_id === selectedCategory)?.category_name || ''
+    const catName = categories.find((c) => String(c.category_id) === selectedCategory)?.category_name || ''
     return (
       <div>
         <div className="flex items-center gap-3 mb-4">

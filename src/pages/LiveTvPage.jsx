@@ -1,35 +1,48 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useOutletContext } from 'react-router-dom'
-import { getLiveCategories, getLiveStreams } from '../api/xtreamApi'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
+import useContentStore from '../store/useContentStore'
 import ChannelCard from '../components/ChannelCard'
 
 export default function LiveTvPage() {
   const { search } = useOutletContext()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [categories, setCategories] = useState([])
   const [channels, setChannels] = useState([])
-  const [selectedCategory, setSelectedCategory] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadingChannels, setLoadingChannels] = useState(false)
 
+  const selectedCategory = searchParams.get('cat')
+
+  const fetchLiveCategories = useContentStore((s) => s.fetchLiveCategories)
+  const fetchLiveStreams = useContentStore((s) => s.fetchLiveStreams)
+
+  // Load categories on mount
   useEffect(() => {
-    getLiveCategories()
+    fetchLiveCategories()
       .then(setCategories)
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [fetchLiveCategories])
 
-  const handleSelectCategory = (cat) => {
-    setSelectedCategory(cat.category_id)
+  // Load channels when a category is selected (including from URL on back-nav)
+  useEffect(() => {
+    if (!selectedCategory) {
+      setChannels([])
+      return
+    }
     setLoadingChannels(true)
-    getLiveStreams(cat.category_id)
+    fetchLiveStreams(selectedCategory)
       .then(setChannels)
       .catch(() => setChannels([]))
       .finally(() => setLoadingChannels(false))
+  }, [selectedCategory, fetchLiveStreams])
+
+  const handleSelectCategory = (cat) => {
+    setSearchParams({ cat: cat.category_id })
   }
 
   const handleBack = () => {
-    setSelectedCategory(null)
-    setChannels([])
+    setSearchParams({})
   }
 
   const filteredCategories = useMemo(() => {
@@ -54,7 +67,7 @@ export default function LiveTvPage() {
 
   // Show channels for selected category
   if (selectedCategory) {
-    const catName = categories.find((c) => c.category_id === selectedCategory)?.category_name || ''
+    const catName = categories.find((c) => String(c.category_id) === selectedCategory)?.category_name || ''
     return (
       <div>
         <div className="flex items-center gap-3 mb-4">
