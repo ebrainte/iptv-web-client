@@ -41,6 +41,7 @@ async function createWindow(port) {
       webSecurity: false,
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: false,
       preload: path.join(__dirname, 'preload.cjs'),
     },
   })
