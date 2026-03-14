@@ -8,11 +8,15 @@ function formatBytes(bytes) {
   return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i]
 }
 
-// Pre-check a manifest to see if it has external-origin segments
+// Pre-check a manifest to see if it needs proxying.
+// If the direct fetch fails (e.g. CORS blocked redirect), we assume proxy is needed.
 async function checkNeedsProxy(m3u8Url) {
   try {
     const res = await fetch(m3u8Url)
-    if (!res.ok) return false
+    if (!res.ok) {
+      console.log(`[IPTV] Direct manifest fetch failed (${res.status}), assuming proxy needed`)
+      return true
+    }
     const text = await res.text()
     const finalOrigin = new URL(res.url).origin
 
@@ -30,8 +34,10 @@ async function checkNeedsProxy(m3u8Url) {
       }
     }
     return false
-  } catch {
-    return false
+  } catch (err) {
+    // Fetch failure (CORS, network error, etc.) — proxy is needed
+    console.log(`[IPTV] Direct manifest fetch error: ${err.message}, assuming proxy needed`)
+    return true
   }
 }
 
