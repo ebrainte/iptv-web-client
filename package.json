@@ -1,8 +1,13 @@
 {
   "name": "iptv-webclient",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
+  "author": {
+    "name": "ebrainte",
+    "email": "ebrainte@users.noreply.github.com"
+  },
+  "description": "IPTV web client with Xtream Codes API support",
   "main": "electron.cjs",
   "scripts": {
     "dev": "vite",
