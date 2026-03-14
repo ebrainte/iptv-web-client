@@ -1,5 +1,6 @@
-const { app, BrowserWindow, session } = require('electron')
+const { app, BrowserWindow } = require('electron')
 const net = require('net')
+const path = require('path')
 
 // Fixed port so localStorage (origin-scoped) persists across restarts.
 // Falls back to the next port if the preferred one is busy.
@@ -40,7 +41,7 @@ async function createWindow(port) {
       webSecurity: false,
       nodeIntegration: false,
       contextIsolation: true,
-      partition: 'persist:iptv',
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   })
 
@@ -70,9 +71,6 @@ app.on('activate', () => {
 })
 
 app.on('before-quit', () => {
-  // Force-flush localStorage to disk before exiting
-  session.fromPartition('persist:iptv').flushStorageData()
-
   if (server) {
     server.close()
     server = null

@@ -1,7 +1,23 @@
 import { create } from 'zustand'
 import useContentStore from './useContentStore'
 
-const saved = JSON.parse(localStorage.getItem('iptv_auth') || 'null')
+// Use Electron's file-based storage when available, fall back to localStorage for web
+const storage = {
+  getItem(key) {
+    if (window.electronStorage) return window.electronStorage.getItem(key)
+    return localStorage.getItem(key)
+  },
+  setItem(key, value) {
+    if (window.electronStorage) return window.electronStorage.setItem(key, value)
+    localStorage.setItem(key, value)
+  },
+  removeItem(key) {
+    if (window.electronStorage) return window.electronStorage.removeItem(key)
+    localStorage.removeItem(key)
+  },
+}
+
+const saved = JSON.parse(storage.getItem('iptv_auth') || 'null')
 
 const useAuthStore = create((set) => ({
   server: saved?.server || '',
@@ -13,13 +29,13 @@ const useAuthStore = create((set) => ({
 
   setAuth: (server, username, password, userInfo, serverInfo) => {
     const data = { server, username, password, userInfo, serverInfo }
-    localStorage.setItem('iptv_auth', JSON.stringify(data))
+    storage.setItem('iptv_auth', JSON.stringify(data))
     useContentStore.getState().clear()
     set({ ...data, isAuthenticated: true })
   },
 
   logout: () => {
-    localStorage.removeItem('iptv_auth')
+    storage.removeItem('iptv_auth')
     useContentStore.getState().clear()
     set({
       server: '',

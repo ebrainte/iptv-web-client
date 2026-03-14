@@ -1,7 +1,7 @@
 {
   "name": "iptv-webclient",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "author": {
     "name": "ebrainte",
@@ -23,7 +23,8 @@
     "files": [
       "dist/**/*",
       "server.js",
-      "electron.cjs"
+      "electron.cjs",
+      "preload.cjs"
     ],
     "directories": {
       "buildResources": "build",
