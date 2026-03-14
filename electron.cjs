@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, session } = require('electron')
 const net = require('net')
 
 // Fixed port so localStorage (origin-scoped) persists across restarts.
@@ -70,6 +70,9 @@ app.on('activate', () => {
 })
 
 app.on('before-quit', () => {
+  // Force-flush localStorage to disk before exiting
+  session.fromPartition('persist:iptv').flushStorageData()
+
   if (server) {
     server.close()
     server = null
