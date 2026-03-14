@@ -2,6 +2,14 @@ const { app, BrowserWindow } = require('electron')
 const net = require('net')
 const path = require('path')
 
+// Resolve the preload script path.
+// In packaged builds, preload.cjs is asar-unpacked (for fs/path access),
+// so we need to replace 'app.asar' with 'app.asar.unpacked' in the path.
+function resolvePreload() {
+  const p = path.join(__dirname, 'preload.cjs')
+  return p.replace('app.asar', 'app.asar.unpacked')
+}
+
 // Fixed port so localStorage (origin-scoped) persists across restarts.
 // Falls back to the next port if the preferred one is busy.
 const PREFERRED_PORT = 47777
@@ -42,7 +50,7 @@ async function createWindow(port) {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: resolvePreload(),
     },
   })
 

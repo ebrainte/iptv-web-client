@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { authenticate } from '../api/xtreamApi'
 import useAuthStore from '../store/useAuthStore'
 
@@ -10,7 +10,11 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const setAuth = useAuthStore((s) => s.setAuth)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const navigate = useNavigate()
+
+  // Already logged in — skip straight to live TV
+  if (isAuthenticated) return <Navigate to="/live" replace />
 
   const handleSubmit = async (e) => {
     e.preventDefault()
