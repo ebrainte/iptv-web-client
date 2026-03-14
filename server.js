@@ -185,18 +185,30 @@ async function serveStatic(req, res) {
   }
 }
 
-const server = createServer((req, res) => {
-  if (req.url.startsWith('/api/proxy-stats')) {
-    handleProxyStats(req, res)
-  } else if (req.url.startsWith('/api/stream')) {
-    handleStream(req, res)
-  } else if (req.url.startsWith('/api/proxy')) {
-    handleProxy(req, res)
-  } else {
-    serveStatic(req, res)
-  }
-})
+export function startServer(port) {
+  const p = port || PORT
+  return new Promise((resolve) => {
+    const server = createServer((req, res) => {
+      if (req.url.startsWith('/api/proxy-stats')) {
+        handleProxyStats(req, res)
+      } else if (req.url.startsWith('/api/stream')) {
+        handleStream(req, res)
+      } else if (req.url.startsWith('/api/proxy')) {
+        handleProxy(req, res)
+      } else {
+        serveStatic(req, res)
+      }
+    })
 
-server.listen(PORT, () => {
-  console.log(`IPTV Web Client running on port ${PORT}`)
-})
+    server.listen(p, () => {
+      console.log(`IPTV Web Client running on port ${p}`)
+      resolve(server)
+    })
+  })
+}
+
+// Run standalone when executed directly (web/Docker deployment)
+const isMain = !process.argv[1] || import.meta.url === `file://${process.argv[1]}`
+if (isMain) {
+  startServer()
+}
