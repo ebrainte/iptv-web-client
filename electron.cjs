@@ -1,10 +1,26 @@
 const { app, BrowserWindow } = require('electron')
 const net = require('net')
 
+// Fixed port so localStorage (origin-scoped) persists across restarts.
+// Falls back to the next port if the preferred one is busy.
+const PREFERRED_PORT = 47777
+
 let mainWindow = null
 let server = null
 
-function findFreePort() {
+function tryPort(port) {
+  return new Promise((resolve) => {
+    const srv = net.createServer()
+    srv.once('error', () => resolve(false))
+    srv.listen(port, () => srv.close(() => resolve(true)))
+  })
+}
+
+async function findPort() {
+  for (let p = PREFERRED_PORT; p < PREFERRED_PORT + 10; p++) {
+    if (await tryPort(p)) return p
+  }
+  // Last resort: OS-assigned random port
   return new Promise((resolve, reject) => {
     const srv = net.createServer()
     srv.listen(0, () => {
@@ -32,7 +48,7 @@ async function createWindow(port) {
 }
 
 app.whenReady().then(async () => {
-  const port = await findFreePort()
+  const port = await findPort()
 
   // Dynamic import of the ESM server module
   const { startServer } = await import('./server.js')
