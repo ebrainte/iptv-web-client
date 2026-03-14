@@ -40,6 +40,7 @@ async function createWindow(port) {
       webSecurity: false,
       nodeIntegration: false,
       contextIsolation: true,
+      partition: 'persist:iptv',
     },
   })
 

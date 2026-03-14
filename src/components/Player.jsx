@@ -8,9 +8,15 @@ function formatBytes(bytes) {
   return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i]
 }
 
+// Detect Electron environment — no CORS restrictions, so proxy is never needed
+const isElectron = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent)
+
 // Pre-check a manifest to see if it needs proxying.
 // If the direct fetch fails (e.g. CORS blocked redirect), we assume proxy is needed.
 async function checkNeedsProxy(m3u8Url) {
+  // Electron disables webSecurity — always use direct
+  if (isElectron) return false
+
   try {
     const res = await fetch(m3u8Url)
     if (!res.ok) {
