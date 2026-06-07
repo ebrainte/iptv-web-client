@@ -77,6 +77,7 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
   const [proxyMode, setProxyMode] = useState(null)
   const [proxyStats, setProxyStats] = useState(null)
   const [resolvedSrc, setResolvedSrc] = useState(null)
+  const [resolutionLabel, setResolutionLabel] = useState('')
   const statsInterval = useRef(null)
 
   // ── Stream stats state ─────────────────────────────────────────────
@@ -285,6 +286,49 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
       setSubtitleTracks(tracks)
     }
   }, [])
+
+  // Track video resolution changes (loadedmetadata & resize events)
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    const handleResize = () => {
+      const width = video.videoWidth
+      const height = video.videoHeight
+      if (width && height) {
+        let label = ''
+        if (height >= 2160) {
+          label = '4K'
+        } else if (height >= 1440) {
+          label = '1440p'
+        } else if (height >= 1080) {
+          label = '1080p'
+        } else if (height >= 720) {
+          label = '720p'
+        } else if (height >= 480) {
+          label = '480p'
+        } else if (height >= 360) {
+          label = '360p'
+        } else {
+          label = `${height}p`
+        }
+        setResolutionLabel(label)
+      } else {
+        setResolutionLabel('')
+      }
+    }
+
+    video.addEventListener('resize', handleResize)
+    video.addEventListener('loadedmetadata', handleResize)
+    
+    // Initial check
+    handleResize()
+
+    return () => {
+      video.removeEventListener('resize', handleResize)
+      video.removeEventListener('loadedmetadata', handleResize)
+    }
+  }, [resolvedSrc])
 
   // Main playback effect
   useEffect(() => {
@@ -530,6 +574,12 @@ export default function Player({ src, proxiedSrc, type, poster, onBack }) {
               ) : (
                 'DIRECT'
               )}
+            </div>
+          )}
+
+          {resolutionLabel && (
+            <div className="bg-black/60 border border-gray-700/50 px-2.5 py-1 rounded text-xs font-bold text-gray-200 uppercase tracking-wide">
+              {resolutionLabel}
             </div>
           )}
         </div>
