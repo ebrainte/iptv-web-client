@@ -1,4 +1,4 @@
-const { contextBridge } = require('electron')
+const { contextBridge, ipcRenderer } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
@@ -43,3 +43,31 @@ contextBridge.exposeInMainWorld('electronStorage', {
     writeStore(store)
   },
 })
+
+// ── Chromecast API ───────────────────────────────────────────────────
+contextBridge.exposeInMainWorld('cast', {
+  isAvailable: true,
+  startDiscovery: () => ipcRenderer.invoke('cast:discover-start'),
+  stopDiscovery: () => ipcRenderer.invoke('cast:discover-stop'),
+  getDevices: () => ipcRenderer.invoke('cast:get-devices'),
+  connect: (host, port) => ipcRenderer.invoke('cast:connect', host, port),
+  loadMedia: (url, contentType, streamType) =>
+    ipcRenderer.invoke('cast:load-media', url, contentType, streamType),
+  stop: () => ipcRenderer.invoke('cast:stop'),
+  onDeviceFound: (callback) => {
+    ipcRenderer.on('cast:device-found', (_event, device) => callback(device))
+  },
+  onStatus: (callback) => {
+    ipcRenderer.on('cast:status', (_event, status) => callback(status))
+  },
+  onError: (callback) => {
+    ipcRenderer.on('cast:error', (_event, error) => callback(error))
+  },
+  removeAllListeners: () => {
+    ipcRenderer.removeAllListeners('cast:device-found')
+    ipcRenderer.removeAllListeners('cast:status')
+    ipcRenderer.removeAllListeners('cast:error')
+  },
+})
+
+

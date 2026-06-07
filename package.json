@@ -25,7 +25,7 @@
       "server.js",
       "electron.cjs",
       "preload.cjs",
-      "!node_modules"
+      "cast-handler.cjs"
     ],
     "asarUnpack": [
       "preload.cjs"
@@ -37,14 +37,25 @@
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "icon": "build/icon.icns",
       "category": "public.app-category.entertainment"
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.ico"
     },
@@ -55,14 +66,26 @@
     },
     "linux": {
       "target": [
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "deb", "arch": ["x64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.png",
       "category": "AudioVideo"
     }
   },
   "dependencies": {
+    "bonjour-service": "^1.4.0",
+    "castv2-client": "^1.2.0",
     "hls.js": "^1.6.15",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

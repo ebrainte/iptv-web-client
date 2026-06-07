@@ -1,6 +1,7 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, ipcMain } = require('electron')
 const net = require('net')
 const path = require('path')
+const castHandler = require('./cast-handler.cjs')
 
 // Resolve the preload script path.
 // In packaged builds, preload.cjs is asar-unpacked (for fs/path access),
@@ -56,7 +57,39 @@ async function createWindow(port) {
 
   mainWindow.loadURL(`http://127.0.0.1:${port}`)
   mainWindow.on('closed', () => { mainWindow = null })
+
+  // Initialize cast handler with the window reference
+  castHandler.init(mainWindow)
 }
+
+// ── Chromecast IPC handlers ──────────────────────────────────────────
+
+ipcMain.handle('cast:discover-start', async () => {
+  return castHandler.startDiscovery()
+})
+
+ipcMain.handle('cast:discover-stop', async () => {
+  castHandler.stopDiscovery()
+  return { success: true }
+})
+
+ipcMain.handle('cast:get-devices', async () => {
+  return castHandler.getDevices()
+})
+
+ipcMain.handle('cast:connect', async (_event, host, port) => {
+  return castHandler.connectToDevice(host, port)
+})
+
+ipcMain.handle('cast:load-media', async (_event, url, contentType, streamType) => {
+  return castHandler.loadMedia(url, contentType, streamType)
+})
+
+ipcMain.handle('cast:stop', async () => {
+  return castHandler.stopCasting()
+})
+
+// ── App lifecycle ────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
   const port = await findPort()
@@ -80,8 +113,11 @@ app.on('activate', () => {
 })
 
 app.on('before-quit', () => {
+  castHandler.cleanup()
   if (server) {
     server.close()
     server = null
   }
 })
+
+
