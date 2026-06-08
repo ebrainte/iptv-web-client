@@ -37,6 +37,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trigger deploy webhook
+        continue-on-error: true
         run: |
           curl -sf -X POST \
             -H "Authorization: Bearer ${{ secrets.DEPLOY_WEBHOOK_SECRET }}" \
